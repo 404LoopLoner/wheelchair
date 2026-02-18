@@ -9,84 +9,146 @@ const camera = new THREE.PerspectiveCamera(
     0.1,
     1000
 );
-camera.position.set(0, 10, 15);
+camera.position.set(0, 12, 18);
 camera.lookAt(0, 0, 0);
 
 // Renderer
-const renderer = new THREE.WebGLRenderer();
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+// Light
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(10, 20, 10);
+scene.add(light);
+
 // Floor
-const floorGeometry = new THREE.PlaneGeometry(20, 20);
-const floorMaterial = new THREE.MeshBasicMaterial({
-    color: 0x555555,
-    side: THREE.DoubleSide
-});
+const floorGeometry = new THREE.PlaneGeometry(40, 40);
+const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x555555 });
 const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-floor.rotation.x = Math.PI / 2;
+floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 
-// Wheelchair
-const geometry = new THREE.BoxGeometry(2, 1, 1);
-const material = new THREE.MeshBasicMaterial({ color: 0x0000ff });
-const wheelchair = new THREE.Mesh(geometry, material);
+//////////////////////////////////////////////////
+// WHEELCHAIR MODEL
+//////////////////////////////////////////////////
+
+const wheelchair = new THREE.Group();
+
+// Body
+const body = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 0.5, 1.2),
+    new THREE.MeshStandardMaterial({ color: 0x1565c0 })
+);
+body.position.y = 0.75;
+wheelchair.add(body);
+
+// Back support
+const back = new THREE.Mesh(
+    new THREE.BoxGeometry(2, 1.2, 0.2),
+    new THREE.MeshStandardMaterial({ color: 0x1e88e5 })
+);
+back.position.set(0, 1.4, -0.5);
+wheelchair.add(back);
+
+// Wheels
+function createWheel(x, z) {
+    const wheel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.5, 0.5, 0.3, 32),
+        new THREE.MeshStandardMaterial({ color: 0x111111 })
+    );
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x, 0.5, z);
+    return wheel;
+}
+
+wheelchair.add(createWheel(1.1, 0));
+wheelchair.add(createWheel(-1.1, 0));
+
+// Person (simple mannequin)
+const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.3, 32, 32),
+    new THREE.MeshStandardMaterial({ color: 0xffcc99 })
+);
+head.position.set(0, 2.2, 0);
+wheelchair.add(head);
+
+const torso = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 1, 0.5),
+    new THREE.MeshStandardMaterial({ color: 0x444444 })
+);
+torso.position.set(0, 1.5, 0);
+wheelchair.add(torso);
+
+// Direction Arrow
+const arrow = new THREE.ArrowHelper(
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(0, 1.2, 0),
+    2,
+    0xff0000
+);
+wheelchair.add(arrow);
+
 scene.add(wheelchair);
 
-// Movement Variables
-let theta = 0;
-const step = 0.1;
-const turn = 0.05;
-const boundary = 8;
+//////////////////////////////////////////////////
+// MOVEMENT VARIABLES
+//////////////////////////////////////////////////
 
-let commands = [];
+let x = 0;
+let z = 0;
+let theta = 0;
+
+const step = 0.4;
+const turn = 0.15;
+
+//////////////////////////////////////////////////
+// LOAD JSON DATA
+//////////////////////////////////////////////////
+
+let data = [];
 let index = 0;
 
-// 🔥 LOAD YOUR JSON FILE
 fetch("combined_10_samples_per_label.json")
     .then(response => response.json())
-    .then(data => {
-
-        // Convert task_label → movement command
-        commands = data.map(row => {
-            if (row.task_label === "feet") return "forward";
-            if (row.task_label === "tongue") return "back";
-            if (row.task_label === "left_hand") return "left";
-            if (row.task_label === "right_hand") return "right";
-        });
-
+    .then(json => {
+        data = json;
         animate();
     });
+
+//////////////////////////////////////////////////
+// ANIMATION LOOP
+//////////////////////////////////////////////////
 
 function animate() {
     requestAnimationFrame(animate);
 
-    if (index < commands.length) {
+    if (data.length > 0) {
+        const label = data[index].task_label;
 
-        let cmd = commands[index];
-
-        if (cmd === "left") {
+        if (label === "left_hand") {
             theta += turn;
         }
-        else if (cmd === "right") {
+
+        if (label === "right_hand") {
             theta -= turn;
         }
-        else if (cmd === "forward") {
-            wheelchair.position.x += step * Math.cos(theta);
-            wheelchair.position.z += step * Math.sin(theta);
-        }
-        else if (cmd === "back") {
-            wheelchair.position.x -= step * Math.cos(theta);
-            wheelchair.position.z -= step * Math.sin(theta);
+
+        if (label === "feet") {
+            x += step * Math.cos(theta);
+            z += step * Math.sin(theta);
         }
 
-        // Boundary
-        wheelchair.position.x = Math.max(Math.min(wheelchair.position.x, boundary), -boundary);
-        wheelchair.position.z = Math.max(Math.min(wheelchair.position.z, boundary), -boundary);
+        if (label === "tongue") {
+            x -= step * Math.cos(theta);
+            z -= step * Math.sin(theta);
+        }
 
+        wheelchair.position.set(x, 0, z);
         wheelchair.rotation.y = -theta;
 
         index++;
+        if (index >= data.length) index = 0;
     }
 
     renderer.render(scene, camera);
