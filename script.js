@@ -99,7 +99,7 @@ let x = 0;
 let z = 0;
 let theta = 0;
 
-const step = 0.4;
+const step = 0.15;     
 const turn = 0.15;
 
 //////////////////////////////////////////////////
@@ -108,47 +108,62 @@ const turn = 0.15;
 
 let data = [];
 let index = 0;
+let lastTime = 0;
 
 fetch("combined_10_samples_per_label.json")
     .then(response => response.json())
     .then(json => {
         data = json;
-        animate();
+        animate(0);
     });
 
 //////////////////////////////////////////////////
 // ANIMATION LOOP
 //////////////////////////////////////////////////
 
-function animate() {
+function animate(time) {
+
     requestAnimationFrame(animate);
 
     if (data.length > 0) {
-        const label = data[index].task_label;
 
-        if (label === "left_hand") {
-            theta += turn;
+        // Move only every 150ms (slower)
+        if (time - lastTime > 150) {
+
+            const current = data[index];
+            const label = current.task_label;
+
+            // LEFT → rotate left
+            if (label === "left_hand") {
+                theta += turn;
+            }
+
+            // RIGHT → rotate right
+            if (label === "right_hand") {
+                theta -= turn;
+            }
+
+            // FEET → forward
+            if (label === "feet") {
+                x += step * Math.cos(theta);
+                z += step * Math.sin(theta);
+            }
+
+            // TONGUE → backward
+            if (label === "tongue") {
+                x -= step * Math.cos(theta);
+                z -= step * Math.sin(theta);
+            }
+
+            // Apply movement
+            wheelchair.position.set(x, 0, z);
+            wheelchair.rotation.y = -theta;
+
+            index++;
+            if (index >= data.length) index = 0;
+
+            lastTime = time;
         }
-
-        if (label === "right_hand") {
-            theta -= turn;
-        }
-
-        if (label === "feet") {
-            x += step * Math.cos(theta);
-            z += step * Math.sin(theta);
-        }
-
-        if (label === "tongue") {
-            x -= step * Math.cos(theta);
-            z -= step * Math.sin(theta);
-        }
-
-        wheelchair.position.set(x, 0, z);
-        wheelchair.rotation.y = -theta;
-
-        index++;
-        if (index >= data.length) index = 0;
     }
 
     renderer.render(scene, camera);
