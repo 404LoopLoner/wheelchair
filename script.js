@@ -1,12 +1,15 @@
 // =============================
-// PROFESSIONAL EEG SIMULATION
+// PROFESSIONAL EEG WHEELCHAIR SIMULATION
+// SLOW + THINKING DELAY VERSION
 // =============================
 
-// SCENE
+// -----------------------------
+// SCENE SETUP
+// -----------------------------
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111111);
 
-// CAMERA (Smooth Follow)
 const camera = new THREE.PerspectiveCamera(
     60,
     window.innerWidth / window.innerHeight,
@@ -15,34 +18,33 @@ const camera = new THREE.PerspectiveCamera(
 );
 camera.position.set(0, 15, 20);
 
-// RENDERER
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.shadowMap.enabled = true;
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// LIGHTING
+// Lighting
 scene.add(new THREE.AmbientLight(0xffffff, 0.5));
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(10, 20, 10);
-dirLight.castShadow = true;
 scene.add(dirLight);
 
-// FLOOR WITH GRID
+// -----------------------------
+// FLOOR + GRID
+// -----------------------------
+
 const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(30, 30),
     new THREE.MeshStandardMaterial({ color: 0x555555 })
 );
 floor.rotation.x = -Math.PI / 2;
-floor.receiveShadow = true;
 scene.add(floor);
 
-const grid = new THREE.GridHelper(30, 30);
-scene.add(grid);
+scene.add(new THREE.GridHelper(30, 30));
 
-// =============================
-// WHEELCHAIR MODEL (Enhanced)
-// =============================
+// -----------------------------
+// WHEELCHAIR MODEL
+// -----------------------------
 
 const wheelchair = new THREE.Group();
 
@@ -52,7 +54,6 @@ const seat = new THREE.Mesh(
     new THREE.MeshStandardMaterial({ color: 0x0066ff })
 );
 seat.position.y = 1.2;
-seat.castShadow = true;
 wheelchair.add(seat);
 
 // Backrest
@@ -93,19 +94,20 @@ wheelchair.add(head);
 
 scene.add(wheelchair);
 
-// =============================
-// PROFESSIONAL EEG PANEL
-// =============================
+// -----------------------------
+// EEG PANEL
+// -----------------------------
 
 const panel = document.createElement("div");
 panel.style.position = "absolute";
 panel.style.top = "10px";
 panel.style.right = "10px";
 panel.style.width = "320px";
-panel.style.background = "rgba(0,0,0,0.8)";
+panel.style.background = "rgba(0,0,0,0.85)";
 panel.style.color = "white";
 panel.style.padding = "15px";
 panel.style.fontFamily = "monospace";
+
 panel.innerHTML = `
 <h3>🧠 EEG Monitor</h3>
 <div id="shape">Thought: -</div>
@@ -113,7 +115,11 @@ panel.innerHTML = `
 <canvas id="wave" width="300" height="100"></canvas>
 <canvas id="spectrum" width="300" height="80"></canvas>
 `;
+
 document.body.appendChild(panel);
+
+const shapeText = document.getElementById("shape");
+const powerText = document.getElementById("power");
 
 const waveCanvas = document.getElementById("wave");
 const waveCtx = waveCanvas.getContext("2d");
@@ -121,21 +127,32 @@ const waveCtx = waveCanvas.getContext("2d");
 const specCanvas = document.getElementById("spectrum");
 const specCtx = specCanvas.getContext("2d");
 
-const shapeText = document.getElementById("shape");
-const powerText = document.getElementById("power");
-
-// =============================
-// DATA + PHYSICS
-// =============================
+// -----------------------------
+// DATA + MOVEMENT VARIABLES
+// -----------------------------
 
 let data = [];
 let index = 0;
 
 let x = 0, z = 0, theta = 0;
-let velocity = 0, turnVelocity = 0;
+let velocity = 0;
+let turnVelocity = 0;
 
 const maxArea = 10;
-const baseSpeed = 0.008;
+const baseSpeed = 0.006;
+
+// Timing control
+let frameCounter = 0;
+const dataUpdateInterval = 30;  // slower dataset playback
+
+let thinkingCounter = 0;
+const thinkingDelay = 25;       // thinking phase frames
+
+let wavePhase = 0;
+
+// -----------------------------
+// LOAD DATA
+// -----------------------------
 
 fetch("combined_10_samples_per_label.json")
     .then(res => res.json())
@@ -144,41 +161,76 @@ fetch("combined_10_samples_per_label.json")
         animate();
     });
 
-let wavePhase = 0;
+// -----------------------------
+// MAIN ANIMATION LOOP
+// -----------------------------
 
 function animate() {
+
     requestAnimationFrame(animate);
-    if (!data.length) return;
+
+    if (!data.length) {
+        renderer.render(scene, camera);
+        return;
+    }
+
+    frameCounter++;
+
+    // Update dataset slowly
+    if (frameCounter % dataUpdateInterval === 0) {
+        index++;
+        if (index >= data.length) index = 0;
+        thinkingCounter = 0;
+    }
 
     const row = data[index];
     const power = Math.abs(row.EEG_Ch2);
 
+    powerText.innerHTML = "EEG Power: " + power.toFixed(2);
+
     let targetSpeed = 0;
     let targetTurn = 0;
 
-    if (row.task_label === "feet") {
-        targetSpeed = baseSpeed * power;
-        shapeText.innerHTML = "Thought: 🔺 Pyramid (Forward)";
-    }
-    if (row.task_label === "tongue") {
-        targetSpeed = -baseSpeed * power;
-        shapeText.innerHTML = "Thought: 🔻 Cone (Backward)";
-    }
-    if (row.task_label === "left_hand") {
-        targetTurn = 0.01 * power;
-        shapeText.innerHTML = "Thought: 🟦 Cube (Left)";
-    }
-    if (row.task_label === "right_hand") {
-        targetTurn = -0.01 * power;
-        shapeText.innerHTML = "Thought: ⚪ Sphere (Right)";
+    // -------------------------
+    // THINKING PHASE
+    // -------------------------
+
+    if (thinkingCounter < thinkingDelay) {
+        shapeText.innerHTML = "🧠 Processing Thought...";
+        thinkingCounter++;
+    } else {
+
+        if (row.task_label === "feet") {
+            targetSpeed = baseSpeed * power * 0.7;
+            shapeText.innerHTML = "Thought: 🔺 Move Forward";
+        }
+
+        else if (row.task_label === "tongue") {
+            targetSpeed = 0;
+            targetTurn = 0;
+            shapeText.innerHTML = "Thought: 🛑 Pause";
+        }
+
+        else if (row.task_label === "left_hand") {
+            targetTurn = 0.007 * power;
+            shapeText.innerHTML = "Thought: 🟦 Turn Left";
+        }
+
+        else if (row.task_label === "right_hand") {
+            targetTurn = -0.007 * power;
+            shapeText.innerHTML = "Thought: ⚪ Turn Right";
+        }
     }
 
-    powerText.innerHTML = "EEG Power: " + power.toFixed(2);
+    // -------------------------
+    // SMOOTH MOTOR RESPONSE
+    // -------------------------
 
-    velocity += (targetSpeed - velocity) * 0.05;
-    turnVelocity += (targetTurn - turnVelocity) * 0.05;
+    velocity += (targetSpeed - velocity) * 0.03;
+    turnVelocity += (targetTurn - turnVelocity) * 0.03;
 
     theta += turnVelocity;
+
     x += velocity * Math.cos(theta);
     z += velocity * Math.sin(theta);
 
@@ -188,19 +240,21 @@ function animate() {
     wheelchair.position.set(x, 0, z);
     wheelchair.rotation.y = -theta;
 
-    leftWheel.rotation.x -= velocity * 25;
-    rightWheel.rotation.x -= velocity * 25;
+    if (Math.abs(velocity) > 0.001) {
+        leftWheel.rotation.x -= velocity * 20;
+        rightWheel.rotation.x -= velocity * 20;
+    }
 
-    // Smooth Camera Follow
+    // Smooth camera follow
     camera.position.lerp(
         new THREE.Vector3(x + 10, 15, z + 15),
-        0.05
+        0.04
     );
     camera.lookAt(x, 0, z);
 
-    // =========================
-    // EEG TIME DOMAIN WAVE
-    // =========================
+    // -------------------------
+    // EEG WAVEFORM
+    // -------------------------
 
     waveCtx.fillStyle = "black";
     waveCtx.fillRect(0, 0, 300, 100);
@@ -209,22 +263,17 @@ function animate() {
     waveCtx.beginPath();
 
     for (let i = 0; i < 300; i++) {
-        const y =
-            50 +
-            Math.sin(i * 0.05 + wavePhase) *
-            power *
-            5;
-
+        const y = 50 + Math.sin(i * 0.05 + wavePhase) * power * 4;
         if (i === 0) waveCtx.moveTo(i, y);
         else waveCtx.lineTo(i, y);
     }
 
     waveCtx.stroke();
-    wavePhase += 0.15;
+    wavePhase += 0.05;
 
-    // =========================
-    // SIMPLE SPECTRUM BARS
-    // =========================
+    // -------------------------
+    // SPECTRUM BARS
+    // -------------------------
 
     specCtx.fillStyle = "black";
     specCtx.fillRect(0, 0, 300, 80);
@@ -233,14 +282,11 @@ function animate() {
         const barHeight =
             Math.abs(Math.sin(wavePhase + i)) *
             power *
-            4;
+            3;
 
         specCtx.fillStyle = "cyan";
         specCtx.fillRect(i * 15, 80 - barHeight, 10, barHeight);
     }
-
-    index++;
-    if (index >= data.length) index = 0;
 
     renderer.render(scene, camera);
 }
