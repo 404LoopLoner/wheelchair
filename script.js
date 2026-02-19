@@ -159,28 +159,34 @@ function animate() {
 
     if (state === "IDLE") {
 
+    // Only trigger if thought changed
+    if (row.task_label !== lastLabel) {
+
         if (row.task_label === "feet") {
             state = "MOVE_FORWARD";
             actionTimer = moveFrames;
-            shapeText.innerHTML = "Thought: 🔺 Forward";
+            shapeText.innerHTML = "Thought: 🔺 Move Forward";
         }
 
         else if (row.task_label === "left_hand") {
             state = "TURN_LEFT";
             actionTimer = turnFrames;
-            shapeText.innerHTML = "Thought: 🟦 Turn Left";
+            shapeText.innerHTML = "Thought: ⬅ Turn Left";
         }
 
         else if (row.task_label === "right_hand") {
             state = "TURN_RIGHT";
             actionTimer = turnFrames;
-            shapeText.innerHTML = "Thought: ⚪ Turn Right";
+            shapeText.innerHTML = "Thought: ➡ Turn Right";
         }
 
         else if (row.task_label === "tongue") {
             state = "PAUSE";
             actionTimer = pauseFrames;
             shapeText.innerHTML = "Thought: 🛑 Pause";
+        }
+
+        lastLabel = row.task_label;
         }
     }
 
