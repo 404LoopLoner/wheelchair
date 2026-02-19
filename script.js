@@ -158,35 +158,33 @@ function animate() {
     // =============================
 
     if (state === "IDLE") {
-
-    // Only trigger if thought changed
-    if (row.task_label !== lastLabel) {
-
-        if (row.task_label === "feet") {
+        if (row.task_label !== lastLabel) {
+            
+            if (row.task_label === "feet") {
             state = "MOVE_FORWARD";
             actionTimer = moveFrames;
-            shapeText.innerHTML = "Thought: 🔺 Move Forward";
-        }
+            shapeText.innerHTML = "Thought: 🔺 Forward";
+            }
 
-        else if (row.task_label === "left_hand") {
+            else if (row.task_label === "left_hand") {
             state = "TURN_LEFT";
             actionTimer = turnFrames;
-            shapeText.innerHTML = "Thought: ⬅ Turn Left";
-        }
+            shapeText.innerHTML = "Thought: 🟦 Turn Left";
+            }
 
-        else if (row.task_label === "right_hand") {
+            else if (row.task_label === "right_hand") {
             state = "TURN_RIGHT";
             actionTimer = turnFrames;
-            shapeText.innerHTML = "Thought: ➡ Turn Right";
-        }
+            shapeText.innerHTML = "Thought: ⚪ Turn Right";
+            }
 
-        else if (row.task_label === "tongue") {
+            else if (row.task_label === "tongue") {
             state = "PAUSE";
             actionTimer = pauseFrames;
             shapeText.innerHTML = "Thought: 🛑 Pause";
-        }
+            }
 
-        lastLabel = row.task_label;
+             lastLabel = row.task_label;
         }
     }
 
@@ -194,15 +192,15 @@ function animate() {
     turnVelocity = 0;
 
     if (state === "MOVE_FORWARD") {
-        velocity = 0.05;
+        velocity = 0.04;
     }
 
     if (state === "TURN_LEFT") {
-        turnVelocity = 0.03;
+        turnVelocity = 0.02;
     }
 
     if (state === "TURN_RIGHT") {
-        turnVelocity = -0.03;
+        turnVelocity = -0.02;
     }
 
     if (state === "PAUSE") {
