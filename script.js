@@ -1,44 +1,46 @@
-// Scene setup
+// ============================
+// SCENE SETUP
+// ============================
+
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x202020);
 
-// Camera
 const camera = new THREE.PerspectiveCamera(
     60,
     window.innerWidth / window.innerHeight,
     0.1,
     1000
 );
-camera.position.set(0, 12, 18);
+camera.position.set(0, 15, 20);
 camera.lookAt(0, 0, 0);
 
-// Renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Lighting
-const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-scene.add(ambient);
-
-const light = new THREE.DirectionalLight(0xffffff, 0.6);
+const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(10, 20, 10);
 scene.add(light);
 
-// Floor
-const floorGeo = new THREE.PlaneGeometry(50, 50);
-const floorMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
-const floor = new THREE.Mesh(floorGeo, floorMat);
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+// ============================
+// FLOOR
+// ============================
+
+const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(60, 60),
+    new THREE.MeshStandardMaterial({ color: 0x555555 })
+);
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 
-// ===============================
+// ============================
 // WHEELCHAIR MODEL
-// ===============================
+// ============================
 
 const wheelchair = new THREE.Group();
 
-// Base
 const base = new THREE.Mesh(
     new THREE.BoxGeometry(4, 0.5, 3),
     new THREE.MeshStandardMaterial({ color: 0x0044aa })
@@ -46,15 +48,14 @@ const base = new THREE.Mesh(
 base.position.y = 1;
 wheelchair.add(base);
 
-// Backrest
 const backrest = new THREE.Mesh(
     new THREE.BoxGeometry(4, 3, 0.5),
     new THREE.MeshStandardMaterial({ color: 0x003366 })
 );
-backrest.position.set(0, 2.5, -1.25);
+backrest.position.set(0, 2.5, -1.2);
 wheelchair.add(backrest);
 
-// Big Wheels
+// Wheels
 const wheelGeo = new THREE.CylinderGeometry(1, 1, 0.5, 32);
 const wheelMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
 
@@ -83,7 +84,7 @@ const head = new THREE.Mesh(
 head.position.y = 4;
 wheelchair.add(head);
 
-// Direction Arrow
+// Direction arrow
 const arrow = new THREE.ArrowHelper(
     new THREE.Vector3(1, 0, 0),
     new THREE.Vector3(0, 1.2, 0),
@@ -94,18 +95,42 @@ wheelchair.add(arrow);
 
 scene.add(wheelchair);
 
-// ===============================
-// DATASET LOGIC
-// ===============================
+// ============================
+// SIDE PANEL UI
+// ============================
+
+const panel = document.createElement("div");
+panel.style.position = "absolute";
+panel.style.top = "10px";
+panel.style.right = "10px";
+panel.style.background = "rgba(0,0,0,0.7)";
+panel.style.color = "white";
+panel.style.padding = "15px";
+panel.style.fontFamily = "monospace";
+panel.style.width = "250px";
+panel.innerHTML = `
+<h3>EEG Monitor</h3>
+<div id="shape">Shape: -</div>
+<div id="freq">EEG Power: -</div>
+`;
+document.body.appendChild(panel);
+
+const shapeText = document.getElementById("shape");
+const freqText = document.getElementById("freq");
+
+// ============================
+// DATA + PHYSICS
+// ============================
 
 let data = [];
-let epochIndex = 0;
+let index = 0;
+
 let x = 0;
 let z = 0;
 let theta = 0;
 
-const baseStep = 0.05;
-const baseTurn = 0.02;
+const wheelDistance = 4.4;
+const baseSpeed = 0.03;
 
 fetch("combined_10_samples_per_label.json")
     .then(res => res.json())
@@ -114,73 +139,61 @@ fetch("combined_10_samples_per_label.json")
         animate();
     });
 
-// Group by epoch
-function getEpochCommands() {
-    if (epochIndex >= data.length) return null;
-
-    const currentEpoch = data[epochIndex].epoch_id;
-    let group = [];
-
-    while (
-        epochIndex < data.length &&
-        data[epochIndex].epoch_id === currentEpoch
-    ) {
-        group.push(data[epochIndex]);
-        epochIndex++;
-    }
-
-    return group;
-}
-
-// ===============================
-// ANIMATION LOOP
-// ===============================
-
-let currentGroup = null;
-let groupCounter = 0;
-
 function animate() {
     requestAnimationFrame(animate);
 
-    if (!currentGroup || groupCounter > 60) {
-        currentGroup = getEpochCommands();
-        groupCounter = 0;
-        if (!currentGroup) return;
+    if (!data.length) return;
+
+    const row = data[index];
+
+    let VL = 0;
+    let VR = 0;
+
+    // EEG power intensity
+    const power = Math.abs(row.EEG_Ch2);
+    const speed = baseSpeed * power;
+
+    // Movement mapping
+    if (row.task_label === "feet") {
+        VL = speed;
+        VR = speed;
+        shapeText.innerHTML = "Shape: Pyramid (Forward)";
     }
 
-    const label = currentGroup[0].task_label;
-
-    // Calculate average EEG power
-    let avgPower = 0;
-    currentGroup.forEach(row => {
-        avgPower += Math.abs(row.EEG_Ch2);
-    });
-    avgPower /= currentGroup.length;
-
-    const step = baseStep * avgPower;
-    const turn = baseTurn * avgPower;
-
-    if (label === "left_hand") {
-        theta += turn;
-    } else if (label === "right_hand") {
-        theta -= turn;
-    } else if (label === "feet") {
-        x += step * Math.cos(theta);
-        z += step * Math.sin(theta);
-
-        leftWheel.rotation.x -= step * 5;
-        rightWheel.rotation.x -= step * 5;
-    } else if (label === "tongue") {
-        x -= step * Math.cos(theta);
-        z -= step * Math.sin(theta);
-
-        leftWheel.rotation.x += step * 5;
-        rightWheel.rotation.x += step * 5;
+    else if (row.task_label === "tongue") {
+        VL = -speed;
+        VR = -speed;
+        shapeText.innerHTML = "Shape: Cone (Backward)";
     }
 
-    // Apply position
+    else if (row.task_label === "left_hand") {
+        VL = speed * 0.3;
+        VR = speed;
+        shapeText.innerHTML = "Shape: Cube (Turn Left)";
+    }
+
+    else if (row.task_label === "right_hand") {
+        VL = speed;
+        VR = speed * 0.3;
+        shapeText.innerHTML = "Shape: Sphere (Turn Right)";
+    }
+
+    freqText.innerHTML = "EEG Power: " + power.toFixed(2);
+
+    // Differential drive equations
+    const v = (VR + VL) / 2;
+    const omega = (VR - VL) / wheelDistance;
+
+    theta += omega;
+    x += v * Math.cos(theta);
+    z += v * Math.sin(theta);
+
     wheelchair.position.set(x, 0, z);
     wheelchair.rotation.y = -theta;
+
+    // Wheel rotation
+    leftWheel.rotation.x -= VL * 5;
+    rightWheel.rotation.x -= VR * 5;
 
     // Update arrow direction
     arrow.setDirection(new THREE.Vector3(
@@ -189,7 +202,8 @@ function animate() {
         Math.sin(theta)
     ));
 
-    groupCounter++;
+    index++;
+    if (index >= data.length) index = 0;
 
     renderer.render(scene, camera);
 }
